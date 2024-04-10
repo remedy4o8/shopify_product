@@ -1,0 +1,68 @@
+import requests
+from urllib.parse import urlparse
+
+def fetch_data(url):
+    """
+    Fetch data from the given URL and return the JSON response.
+    """
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        print(f"Error fetching data: {e}")
+        return None
+
+def format_product_details(product, domain):
+    """
+    Format product details from the provided data into a string.
+    """
+    product_title = product.get('title')
+    product_handle = product.get('handle')
+    if not product_handle:
+        return None
+
+    product_url = f"https://{domain}/products/{product_handle}"  # Constructing the product URL using the domain and handle
+    message = f"**[{product_title}]({product_url})**\n"  # Making the title a clickable URL
+
+    for variant in product.get('variants', []):
+        variant_id = variant.get('id')
+        price = variant.get('price')
+        size = variant.get('option1')
+        message += f"    Variant: {variant_id}, Price: ${price}, Size: {size}\n"
+
+    return message
+
+def send_to_discord_webhook(url, message):
+    """
+    Send a message to a Discord webhook, splitting it if it's longer than 2000 characters.
+    """
+    max_length = 2000
+    messages = [message[i:i+max_length] for i in range(0, len(message), max_length)]
+
+    for msg in messages:
+        data = {"content": msg}
+        try:
+            response = requests.post(url, json=data)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            print(f"Error sending to Discord: {e}")
+
+def send_products_to_discord(url, data, webhook_url):
+    domain = urlparse(url).netloc
+    if not data.get('products'):
+        print("No products found.")
+        return
+
+    for product in data['products']:
+        formatted_message = format_product_details(product, domain)
+        if formatted_message:
+            send_to_discord_webhook(webhook_url, formatted_message)
+
+# URL of the JSON file and Discord Webhook URL
+url = ""
+webhook_url = ""
+
+# Fetch data and send each product to Discord
+data = fetch_data(url)
+send_products_to_discord(url, data, webhook_url)
